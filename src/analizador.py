@@ -1,15 +1,37 @@
+"""Analizador simple de secuencias FASTA.
+
+Proporciona utilidades para leer archivos FASTA, calcular
+estadísticas básicas (longitud y contenido GC) y escribir
+resultados en formato TSV.
+
+Este módulo valida la existencia de archivos al abrirlos,
+acepta secuencias con bases en minúsculas y documenta las
+funciones principales.
+"""
+
 import argparse
+import os
 
 
-def calcular_gc(secuencia):
-    """
-    Calcula el contenido GC de una secuencia.
+def calcular_gc(secuencia: str) -> float:
+    """Calcula el contenido GC de una secuencia.
+
+    Convierte la secuencia a mayúsculas para contar tanto
+    letras mayúsculas como minúsculas ('g' y 'c').
+
+    Args:
+        secuencia: Secuencia de ADN/ARN.
+
+    Returns:
+        Fracción de bases que son G o C (entre 0 y 1). Retorna 0
+        si la secuencia está vacía.
     """
 
     if len(secuencia) == 0:
-        return 0
+        return 0.0
 
-    gc = secuencia.count("G") + secuencia.count("C")
+    seq_up = secuencia.upper()
+    gc = seq_up.count("G") + seq_up.count("C")
 
     return gc / len(secuencia)
 
@@ -20,33 +42,28 @@ def leer_fasta(ruta):
     de tuplas (encabezado, secuencia).
     """
 
+    if not os.path.isfile(ruta):
+        raise FileNotFoundError(f"No existe el archivo: {ruta}")
+
     secuencias = []
 
     encabezado = None
     secuencia_actual = ""
 
     with open(ruta, "r") as archivo:
-
         for linea in archivo:
-
             linea = linea.strip()
 
             if linea.startswith(">"):
-
                 if encabezado is not None:
-
                     secuencias.append((encabezado, secuencia_actual))
 
                 encabezado = linea[1:]
-
                 secuencia_actual = ""
-
             else:
-
                 secuencia_actual += linea
 
         if encabezado is not None:
-
             secuencias.append((encabezado, secuencia_actual))
 
     return secuencias
@@ -58,7 +75,6 @@ def calcular_estadisticas(encabezado, secuencia):
     """
 
     longitud = len(secuencia)
-
     contenido_gc = calcular_gc(secuencia)
 
     return {
@@ -100,13 +116,10 @@ def escribir_resultados(stats, ruta):
     """
     Escribe los resultados en un archivo TSV.
     """
-
     with open(ruta, "w") as archivo:
-
         archivo.write("encabezado\tlongitud\tcontenido_gc\n")
 
         for stat in stats:
-
             archivo.write(
                 f"{stat['encabezado']}\t"
                 f"{stat['longitud']}\t"
@@ -150,32 +163,33 @@ def main():
     print(f"Leyendo archivo: {args.input}")
 
     try:
-
         secuencias = leer_fasta(args.input)
 
+        print(f"{len(secuencias)} secuencias encontradas")
+
+        resultados = []
+
+        for encabezado, secuencia in secuencias:
+            stats = calcular_estadisticas(encabezado, secuencia)
+            if pasa_filtros(stats, args):
+                resultados.append(stats)
+
+        print(f"{len(resultados)} secuencias pasan los filtros")
+
+        try:
+            escribir_resultados(resultados, args.output)
+        except OSError as e:
+            print(f"Error al escribir '{args.output}': {e}")
+            return
+
+        print(f"Resultados escritos en '{args.output}'")
+
     except FileNotFoundError:
-
         print(f"Error: no existe el archivo '{args.input}'")
-
         return
-
-    print(f"{len(secuencias)} secuencias encontradas")
-
-    resultados = []
-
-    for encabezado, secuencia in secuencias:
-
-        stats = calcular_estadisticas(encabezado, secuencia)
-
-        if pasa_filtros(stats, args):
-
-            resultados.append(stats)
-
-    print(f"{len(resultados)} secuencias pasan los filtros")
-
-    escribir_resultados(resultados, args.output)
-
-    print(f"Resultados escritos en '{args.output}'")
+    except Exception as e:
+        print(f"Error inesperado: {e}")
+        return
 
 
 if __name__ == "__main__":
